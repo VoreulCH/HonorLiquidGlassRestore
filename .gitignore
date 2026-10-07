@@ -1,0 +1,6 @@
+build/
+tools/
+*.apk
+*.jks
+*.keystore
+*.log
