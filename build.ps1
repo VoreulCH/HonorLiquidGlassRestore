@@ -34,7 +34,7 @@ if ($LASTEXITCODE -ne 0) { throw "aapt2 compile failed" }
     -A "$proj\assets" `
     -R "$build\res.zip" `
     --min-sdk-version 28 --target-sdk-version 35 `
-    --version-code 13 --version-name 2.1 `
+    --version-code 14 --version-name 2.2 `
     --auto-add-overlay
 if ($LASTEXITCODE -ne 0) { throw "aapt2 link failed" }
 
