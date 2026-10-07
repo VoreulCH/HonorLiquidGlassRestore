@@ -450,15 +450,20 @@ public final class MainHook implements IXposedHookLoadPackage {
                         // values (after any scaling) so tiles render exactly
                         // like desktop folders. Cases >=2 are the liquid
                         // branches (2 = tiles, 3 = ntf banner).
+                        // thickness honors the thick prop as a multiplier on
+                        // the folder base (0.62) — widens the edge refraction
+                        // band without touching refraction/dispersion.
                         try {
+                            float tMul = sThickScale > 0 ? sThickScale : 1.0f;
                             XposedHelpers.setFloatField(o, "refraction", 0.3f);
                             XposedHelpers.setFloatField(o, "depth", 0.54f);
-                            XposedHelpers.setFloatField(o, "thickness", 0.62f);
+                            XposedHelpers.setFloatField(o, "thickness", 0.62f * tMul);
                             XposedHelpers.setFloatField(o, "dispersion", 0.2f);
                             if (sFolderLogged < 3) {
                                 sFolderLogged++;
-                                log("folder: liquid optics -> 0.3/0.54/0.62/0.2 (case="
-                                        + param.args[0] + ")");
+                                log("folder: liquid optics -> 0.3/0.54/"
+                                        + (0.62f * tMul) + "/0.2 (case="
+                                        + param.args[0] + ", thick x" + tMul + ")");
                             }
                         } catch (Throwable t) {
                             log("folder optics failed: " + t);
