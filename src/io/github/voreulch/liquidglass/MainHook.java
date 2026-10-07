@@ -83,6 +83,14 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
  *       disp    (0.0-3.0): dispersion only — chromatic fringe
  *     refract still scales all four when thick/disp unset (back-compat);
  *     set thick/disp to override their share.
+ *
+ * v2.2 addition:
+ *   - persist.sys.lgr.tblur (0.1-2.0, default 1.0): scale the PER-SURFACE
+ *     blur radius (BlurParametersConfig.blurRadius / dynamicCardBlurRadius).
+ *     Every tile / notification card re-blurs the already-blurred panel
+ *     bitmap with this radius — the residual frosted look. Independent of
+ *     `radius` (which scales the panel-background blur), so tiles can be
+ *     made clearer without sharpening the whole background.
  */
 public final class MainHook implements IXposedHookLoadPackage {
 
@@ -131,6 +139,7 @@ public final class MainHook implements IXposedHookLoadPackage {
     private static final String DISP_PROP = "persist.sys.lgr.disp";
     private static final String RIM_PROP = "persist.sys.lgr.rim";
     private static final String FOLDER_PROP = "persist.sys.lgr.folder";
+    private static final String TBLUR_PROP = "persist.sys.lgr.tblur";
     private static final int DEFAULT_DEGREE = 85;
     private static final float DEFAULT_RADIUS = 1.0f;
     private static final float DEFAULT_MASK = 1.0f;
@@ -139,6 +148,7 @@ public final class MainHook implements IXposedHookLoadPackage {
     private static final float DEFAULT_REFRACT = 1.0f;
     private static final float DEFAULT_EDGE = 1.0f;
     private static final float DEFAULT_RIM = 1.0f;
+    private static final float DEFAULT_TBLUR = 1.0f;
     private static final float UNSET = -1.0f;
 
     private static boolean sFlipLogged = false;
@@ -170,11 +180,13 @@ public final class MainHook implements IXposedHookLoadPackage {
     private static int sRimCount = 0;
     private static boolean sFolderMode = false;
     private static int sFolderLogged = 0;
+    private static float sTileBlurScale = DEFAULT_TBLUR;
+    private static int sTileBlurLogged = 0;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) {
         ClassLoader cl = lpparam.classLoader;
-        log("v2.1 loaded in process: " + lpparam.packageName);
+        log("v2.2 loaded in process: " + lpparam.packageName);
 
         hookTransparentMode(cl);
         hookBlurParams(cl);
@@ -204,6 +216,7 @@ public final class MainHook implements IXposedHookLoadPackage {
         sDispScale = readOptFloatProp(DISP_PROP, 0.0f, 3.0f);
         sRimScale = readFloatProp(RIM_PROP, DEFAULT_RIM, 0.15f, 1.0f);
         sFolderMode = readFloatProp(FOLDER_PROP, 0.0f, 0.0f, 1.0f) > 0.5f;
+        sTileBlurScale = readFloatProp(TBLUR_PROP, DEFAULT_TBLUR, 0.1f, 2.0f);
     }
 
     /**
@@ -449,6 +462,29 @@ public final class MainHook implements IXposedHookLoadPackage {
                             }
                         } catch (Throwable t) {
                             log("folder optics failed: " + t);
+                        }
+                    }
+                    if (Math.abs(sTileBlurScale - 1.0f) > 0.001f) {
+                        // second blur pass: every tile / card re-blurs the
+                        // panel bitmap with blurRadius — the residual frosted
+                        // look. Independent of the background radius prop.
+                        try {
+                            float br = XposedHelpers.getFloatField(o, "blurRadius");
+                            float nbr = Math.max(1.0f, br * sTileBlurScale);
+                            XposedHelpers.setFloatField(o, "blurRadius", nbr);
+                            float dbr = XposedHelpers.getFloatField(o, "dynamicCardBlurRadius");
+                            if (dbr > 0.01f) {
+                                XposedHelpers.setFloatField(o, "dynamicCardBlurRadius",
+                                        Math.max(1.0f, dbr * sTileBlurScale));
+                            }
+                            if (sTileBlurLogged < 3) {
+                                sTileBlurLogged++;
+                                log("tblur: case=" + (param.args.length > 0 ? param.args[0] : "?")
+                                        + " blurRadius " + br + " -> " + nbr
+                                        + " dynamicCard " + dbr + " x" + sTileBlurScale);
+                            }
+                        } catch (Throwable t) {
+                            log("tblur scale failed: " + t);
                         }
                     }
                 }
